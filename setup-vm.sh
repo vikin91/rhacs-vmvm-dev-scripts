@@ -84,9 +84,13 @@ check_ssh_agent() {
 	
 	# Check if any keys are loaded
 	local key_count
-	key_count=$(ssh-add -l 2>/dev/null | grep -c "^[0-9]" || echo "0")
+	if ssh-add -l &>/dev/null; then
+		key_count=$(ssh-add -l 2>/dev/null | wc -l | tr -d ' ')
+	else
+		key_count=0
+	fi
 	
-	if [ "$key_count" -eq 0 ]; then
+	if [ "${key_count:-0}" -eq 0 ]; then
 		echo "⚠️  WARNING: No SSH keys loaded in ssh-agent"
 		echo "   You will be prompted for your SSH key passphrase multiple times"
 		echo ""
@@ -152,7 +156,6 @@ setup_ssh_opts() {
 		--namespace "$NAMESPACE"
 		--local-ssh-opts="-o StrictHostKeyChecking=no"
 		--local-ssh-opts="-o UserKnownHostsFile=/dev/null"
-		--local-ssh-opts="-o BatchMode=yes"
 		--local-ssh-opts="-o ConnectTimeout=10"
 	)
 
@@ -166,36 +169,41 @@ setup_ssh_opts() {
 test_ssh_connection() {
 	echo "Testing SSH connection to VMI..."
 	
-	# Try a simple SSH command
-	if virtctl ssh "${SSH_OPTS[@]}" \
+	# Try a simple SSH command with BatchMode for the test
+	if virtctl ssh \
+		--namespace "$NAMESPACE" \
+		--local-ssh-opts="-o StrictHostKeyChecking=no" \
+		--local-ssh-opts="-o UserKnownHostsFile=/dev/null" \
+		--local-ssh-opts="-o BatchMode=yes" \
+		--local-ssh-opts="-o ConnectTimeout=10" \
 		--command "echo SSH_TEST_OK" \
 		"${SSH_USER}@vmi/${VMI_NAME}" 2>&1 | grep -q "SSH_TEST_OK"; then
-		echo "✓ SSH connection successful"
+		echo "✓ SSH connection successful (using SSH keys)"
 		echo ""
 		return 0
 	fi
 
-	# If we got here, SSH failed
-	echo "✗ SSH connection failed"
+	# If we got here, SSH with keys failed
+	echo "⚠️  SSH key authentication failed"
 	echo ""
-	echo "⚠️  This is likely because:"
+	echo "   This is likely because:"
 	echo "   1. Your SSH key has a passphrase and is not loaded in ssh-agent"
 	echo "   2. Your SSH key is not authorized on the VM"
 	echo ""
-	echo "To fix this, run:"
+	echo "   To fix this, run:"
 	echo "   ssh-add ~/.ssh/id_ed25519"
 	echo ""
-	echo "Or if you want to use password authentication, the password is:"
-	echo "   ${VM_PASSWORD:-password}"
+	echo "   Alternatively, you can use password authentication"
+	echo "   Password: ${VM_PASSWORD:-password}"
 	echo ""
 	
-	read -p "Do you want to continue anyway? (y/N): " -n 1 -r
+	read -p "Continue with password authentication? (y/N): " -n 1 -r
 	echo ""
 	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 		echo "Aborted by user"
 		exit 1
 	fi
-	echo "Continuing... (you may be prompted for passwords)"
+	echo "Continuing... (you will be prompted for passwords)"
 	echo ""
 }
 
