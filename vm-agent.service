@@ -1,0 +1,17 @@
+[Unit]
+Description=VM Agent - VSOCK Communication Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/cloud-user/
+ExecStart=/home/cloud-user/vm-agent-amd64 --daemon --index-interval 1000ms --port 818
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
