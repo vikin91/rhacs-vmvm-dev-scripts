@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+# Helper script to view VM agent logs
+# Usage: ./vm-logs.sh <vmi-name> [follow|status]
+
+set -euo pipefail
+
+NAMESPACE="${NAMESPACE:-openshift-cnv}"
+SSH_USER="${SSH_USER:-cloud-user}"
+VMI_NAME="${1:-}"
+ACTION="${2:-tail}"
+
+if [ -z "$VMI_NAME" ]; then
+	echo "Usage: $0 <vmi-name> [follow|status|tail|all]"
+	echo ""
+	echo "Examples:"
+	echo "  $0 rhel9-1              # Show last 50 lines"
+	echo "  $0 rhel9-1 follow       # Follow logs in real-time"
+	echo "  $0 rhel9-1 status       # Show service status"
+	echo "  $0 rhel9-1 all          # Show all logs"
+	exit 1
+fi
+
+SSH_OPTS=(
+	--namespace "$NAMESPACE"
+	--local-ssh-opts="-o StrictHostKeyChecking=no"
+	--local-ssh-opts="-o UserKnownHostsFile=/dev/null"
+)
+
+case "$ACTION" in
+	follow|f)
+		echo "Following logs for vm-agent on $VMI_NAME (Ctrl+C to stop)..."
+		echo ""
+		virtctl ssh "${SSH_OPTS[@]}" \
+			--command "sudo journalctl -u vm-agent.service -f --no-pager" \
+			"${SSH_USER}@vmi/${VMI_NAME}"
+		;;
+	status|s)
+		echo "Service status for vm-agent on $VMI_NAME:"
+		echo ""
+		virtctl ssh "${SSH_OPTS[@]}" \
+			--command "sudo systemctl status vm-agent.service --no-pager" \
+			"${SSH_USER}@vmi/${VMI_NAME}"
+		;;
+	all|a)
+		echo "All logs for vm-agent on $VMI_NAME:"
+		echo ""
+		virtctl ssh "${SSH_OPTS[@]}" \
+			--command "sudo journalctl -u vm-agent.service --no-pager" \
+			"${SSH_USER}@vmi/${VMI_NAME}"
+		;;
+	tail|t|*)
+		echo "Last 50 lines of logs for vm-agent on $VMI_NAME:"
+		echo ""
+		virtctl ssh "${SSH_OPTS[@]}" \
+			--command "sudo journalctl -u vm-agent.service -n 50 --no-pager" \
+			"${SSH_USER}@vmi/${VMI_NAME}"
+		;;
+esac
+
