@@ -124,7 +124,8 @@ function virtInstall() {
 			echo "CSV is Succeeded"
 			break
 		fi
-		if [ -n "$PHASE" ] && [ "$PHASE" != "Installing" ] && [ "$PHASE" != "Pending" ]; then
+		# Warn only on truly problematic phases
+		if [ -n "$PHASE" ] && [ "$PHASE" != "Installing" ] && [ "$PHASE" != "Pending" ] && [ "$PHASE" != "InstallReady" ]; then
 			echo "WARNING: Unexpected CSV phase: $PHASE"
 		fi
 		if [ $((i % 12)) -eq 0 ]; then
@@ -237,6 +238,6 @@ function virtInstall() {
 }
 
 # Execute if called directly (not sourced)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [ "${BASH_SOURCE[0]:-$0}" = "${0}" ]; then
 	virtInstall
 fi
