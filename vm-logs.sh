@@ -10,7 +10,14 @@ SSH_USER="${SSH_USER:-cloud-user}"
 VMI_NAME="${1:-}"
 ACTION="${2:-tail}"
 
-if [ -z "$VMI_NAME" ]; then
+# Function to list available VMs
+list_vms() {
+	echo "Available VMs in namespace $NAMESPACE:"
+	kubectl get vmi -n "$NAMESPACE" --no-headers 2>/dev/null | awk '{print "  - " $1}' || echo "  (none found or unable to connect to cluster)"
+}
+
+# Show usage
+show_usage() {
 	echo "Usage: $0 <vmi-name> [follow|status|tail|all]"
 	echo ""
 	echo "Examples:"
@@ -18,6 +25,30 @@ if [ -z "$VMI_NAME" ]; then
 	echo "  $0 rhel9-1 follow       # Follow logs in real-time"
 	echo "  $0 rhel9-1 status       # Show service status"
 	echo "  $0 rhel9-1 all          # Show all logs"
+	echo ""
+	list_vms
+}
+
+if [ -z "$VMI_NAME" ]; then
+	show_usage
+	exit 1
+fi
+
+# Catch common mistake: using action keyword as VM name
+case "$VMI_NAME" in
+	follow|f|status|s|tail|t|all|a)
+		echo "ERROR: '$VMI_NAME' looks like an action, not a VM name!"
+		echo ""
+		show_usage
+		exit 1
+		;;
+esac
+
+# Validate that the VM exists
+if ! kubectl get vmi "$VMI_NAME" -n "$NAMESPACE" &>/dev/null; then
+	echo "ERROR: Virtual machine instance '$VMI_NAME' not found in namespace '$NAMESPACE'"
+	echo ""
+	list_vms
 	exit 1
 fi
 
