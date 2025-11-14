@@ -18,13 +18,14 @@ list_vms() {
 
 # Show usage
 show_usage() {
-	echo "Usage: $0 <vmi-name> [follow|status|tail|all]"
+	echo "Usage: $0 <vmi-name> [follow|status|tail|all|flags]"
 	echo ""
 	echo "Examples:"
 	echo "  $0 rhel9-1              # Show last 50 lines"
 	echo "  $0 rhel9-1 follow       # Follow logs in real-time"
 	echo "  $0 rhel9-1 status       # Show service status"
 	echo "  $0 rhel9-1 all          # Show all logs"
+	echo "  $0 rhel9-1 flags        # Show available agent flags"
 	echo ""
 	list_vms
 }
@@ -85,6 +86,13 @@ case "$ACTION" in
 		echo ""
 		virtctl ssh "${SSH_OPTS[@]}" \
 			--command "sudo journalctl -u vm-agent.service -n 50 --no-pager" \
+			"${SSH_USER}@vmi/${VMI_NAME}"
+		;;
+	help-flags|flags)
+		echo "Checking available vm-agent command-line flags:"
+		echo ""
+		virtctl ssh "${SSH_OPTS[@]}" \
+			--command "~/vm-agent-amd64 --help 2>&1 || ~/vm-agent-amd64 -h 2>&1 || echo 'No help output available'" \
 			"${SSH_USER}@vmi/${VMI_NAME}"
 		;;
 esac
