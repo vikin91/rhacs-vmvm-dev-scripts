@@ -14,6 +14,32 @@ ACS can be deployed before or after executing actions from those scripts (or not
 ### Repository
 - `setup-vm.sh` requires: `STACKROX_REPO` environment variable pointing to stackrox/stackrox repository (default: `~/src/go/src/github.com/stackrox/stackrox`)
 
+### SSH Key Setup (Required Before First Use)
+
+You **must** add your SSH public key to `add-vms.sh` before deploying VMs. This key is injected via cloud-init and allows you to SSH into the VMs.
+
+**Location:** Edit the `SSH_KEYS` array in `add-vms.sh` (around line 20):
+
+```bash
+# SSH keys for cloud-init
+SSH_KEYS=(
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-email@example.com"
+    "ssh-rsa AAAAB3NzaC1yc2EAAAA... another-user@example.com"
+)
+```
+
+**How to get your SSH public key:**
+```bash
+# If you have an existing key:
+cat ~/.ssh/id_ed25519.pub   # or id_rsa.pub
+
+# If you need to generate one:
+ssh-keygen -t ed25519 -C "your-email@example.com"
+cat ~/.ssh/id_ed25519.pub
+```
+
+Copy the entire output line (starting with `ssh-ed25519` or `ssh-rsa`) and add it to the `SSH_KEYS` array. Multiple keys can be added for team access.
+
 ## Scripts Overview
 
 ### 1. virt.sh - Install OpenShift Virtualization
@@ -65,8 +91,8 @@ ACS can be deployed before or after executing actions from those scripts (or not
 3. Runs `setup-vm.sh` on each VM in parallel (if present)
 4. Reports deployment summary
 
-**⚠️ Must change:**
-- **SSH keys** - Replace with your team's public SSH keys in the `SSH_KEYS` array
+**⚠️ Must change before first use:**
+- **SSH keys** - Add your public SSH key(s) to the `SSH_KEYS` array (see [SSH Key Setup](#ssh-key-setup-required-before-first-use) above)
 
 **Hardcoded values to customize:**
 - CPU: 1 core
@@ -149,28 +175,77 @@ ACS can be deployed before or after executing actions from those scripts (or not
 - No persistent state changes
 - Use for monitoring and troubleshooting
 
+---
+
+### 5. vm-agent-debug.sh - Enable/Disable Debug Logging
+
+**What it needs:**
+- KUBECONFIG set
+- Target VMI must be running with vm-agent installed
+
+**Inputs:**
+- **Argument 1**: VMI name (required)
+- **Argument 2**: Action (optional, default: `status`)
+  - `enable` or `e` - Enable debug logging (adds `--log-level debug`)
+  - `disable` or `d` - Disable debug logging
+  - `status` or `s` - Show current service configuration
+  - `flags` or `f` - Show all available agent flags
+- **Environment Variables**:
+  - `NAMESPACE` - Target namespace (default: `openshift-cnv`)
+  - `SSH_USER` - VM username (default: `cloud-user`)
+
+**What it does:**
+- Modifies the systemd service file to enable/disable debug flags
+- Restarts the vm-agent service automatically
+
+**After completion:**
+- Agent runs with modified logging level
+- View debug logs with: `./vm-logs.sh <vm-name> follow`
+
 ## Quick Start Workflow
 
-```bash
-# 0. Create an Openshift cluster
+Follow these steps to get VMs running with the vm-agent deployed:
 
-# 1. Set your kubeconfig to point to the Openshift cluster
+```bash
+# 0. Prerequisites: Have an OpenShift cluster ready
+
+# 1. Set your kubeconfig to point to the OpenShift cluster
 export KUBECONFIG=~/.kube/config
 
-# 2. Install OpenShift Virtualization
+# 2. Add your SSH public key to add-vms.sh (REQUIRED - see "SSH Key Setup" above)
+#    Edit the SSH_KEYS array in add-vms.sh with your key from:
+cat ~/.ssh/id_ed25519.pub
+
+# 3. Set the path to your stackrox repository (for building the agent)
+export STACKROX_REPO=~/path/to/stackrox/stackrox
+
+# 4. Install OpenShift Virtualization (takes ~10-30 minutes)
 ./virt.sh
 
-# 3. Deploy 3 VMs with custom prefix
-VM_PREFIX=myvm ./add-vms.sh 3
+# 5. Deploy VMs (this also runs setup-vm.sh automatically to install the agent)
+./add-vms.sh 3    # Deploy 3 VMs named rhel9-1, rhel9-2, rhel9-3
 
-# 4. VMs are now running with vm-agent installed
+# 6. Verify VMs are running with agent installed
 kubectl get vm,vmi -n openshift-cnv
+./vm-logs.sh rhel9-1 status
 
-# 5. View logs from a VM
-./vm-logs.sh myvm-1 follow
+# 7. View agent logs
+./vm-logs.sh rhel9-1 follow
 
-# 6. Access a VM
-virtctl ssh -n openshift-cnv cloud-user@vmi/myvm-1
+# 8. (Optional) SSH into a VM
+virtctl ssh -n openshift-cnv cloud-user@vmi/rhel9-1
+```
+
+### Manual Agent Installation
+
+If you need to install/update the agent on a VM manually (e.g., after code changes):
+
+```bash
+# Install agent on a specific VM
+./setup-vm.sh rhel9-1
+
+# Or let it auto-detect the first available VM
+./setup-vm.sh
 ```
 
 ## Common Environment Variables
@@ -204,7 +279,15 @@ virtctl console <vm-name> -n openshift-cnv
 # Check vm-agent service
 ./vm-logs.sh <vm-name> status
 
+# Enable debug logging for more detailed output
+./vm-agent-debug.sh <vm-name> enable
+./vm-logs.sh <vm-name> follow
+
 # SSH into VM manually
 virtctl ssh -n openshift-cnv cloud-user@vmi/<vm-name>
+
+# Sync time on VM (if time drift issues)
+virtctl ssh -n openshift-cnv cloud-user@vmi/<vm-name> \
+  --command "sudo timedatectl set-ntp true && sudo chronyc makestep"
 ```
 
