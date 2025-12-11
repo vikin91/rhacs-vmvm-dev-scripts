@@ -7,12 +7,13 @@
 set -uo pipefail  # Note: not using -e due to parallel execution
 
 # Global variables
+VM_OS="rhel9"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 NAMESPACE="${NAMESPACE:-openshift-cnv}"
 SSH_USER="${SSH_USER:-cloud-user}"
 VM_PASSWORD="${VM_PASSWORD:-password}"
-VM_PREFIX="${VM_PREFIX:-rhel9}"
-CONTAINER_IMAGE="${CONTAINER_IMAGE:-registry.redhat.io/rhel9/rhel-guest-image:latest}"
+VM_PREFIX="${VM_PREFIX:-${VM_OS}}"
+CONTAINER_IMAGE="${CONTAINER_IMAGE:-registry.redhat.io/${VM_OS}/rhel-guest-image:latest}"
 NUM_VMS=0
 
 # SSH keys for cloud-init
@@ -64,16 +65,25 @@ check_prerequisites() {
 
 # Validate and parse number of VMs argument
 parse_arguments() {
-	local num_vms_arg="${1:-1}"
-	
+	local os_arg="${1:-1}"
+	local num_vms_arg="${2:-1}"
+
 	if ! [[ "$num_vms_arg" =~ ^[0-9]+$ ]] || [ "$num_vms_arg" -lt 1 ]; then
 		echo "ERROR: Please provide a valid positive number"
 		echo "Usage: $0 [number_of_vms]"
 		exit 1
 	fi
+	if ! [[ "$os_arg" =~ ^rhel7|rhel8|rhel9|rhel10+$ ]]; then
+		echo "ERROR: Please provide a valid OS: rhel7|rhel8|rhel9|rhel10"
+		echo "Usage: $0 <VM_OS> [number_of_vms]"
+		exit 1
+	fi
 
 	NUM_VMS="$num_vms_arg"
-	echo "Requesting $NUM_VMS VM(s) with prefix: $VM_PREFIX"
+	VM_OS="$os_arg"
+	VM_PREFIX="$os_arg"
+	CONTAINER_IMAGE="registry.redhat.io/${VM_OS}/rhel-guest-image:latest"
+	echo "Requesting $NUM_VMS VM(s) with OS $VM_OS names with prefix: $VM_PREFIX"
 	echo ""
 }
 
