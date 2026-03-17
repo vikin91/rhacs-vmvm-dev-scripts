@@ -18,8 +18,9 @@ NUM_VMS=0
 
 # SSH keys for cloud-init
 SSH_KEYS=(
-	"ssh-ed25519 AAAA... person1@example.com"
-	"ssh-ed25519 AAAA... person2@example.com"
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICdtCZmU13+BKrJuHNqSAy8IjUOGL2rkq1kA67VIEITP piotr@stackrox.com"
+	# "ssh-ed25519 AAAA... person1@example.com"
+	# "ssh-ed25519 AAAA... person2@example.com"
 )
 
 # Check prerequisites
