@@ -258,6 +258,30 @@ check_git_branch() {
 	fi
 }
 
+# Configure VM environment (timezone, roxroot bind mounts)
+configure_vm() {
+	echo "Configuring VM environment..."
+
+	local configure_cmd
+	configure_cmd="sudo timedatectl set-timezone Europe/Berlin && \
+sudo mkdir -p /tmp/roxroot/{etc,var,usr,root} && \
+sudo mount --bind /etc /tmp/roxroot/etc 2>/dev/null || true && \
+sudo mount --bind /var /tmp/roxroot/var 2>/dev/null || true && \
+sudo mount --bind /usr /tmp/roxroot/usr 2>/dev/null || true && \
+sudo mount --bind /root /tmp/roxroot/root 2>/dev/null || true"
+
+	if ! virtctl ssh "${SSH_OPTS[@]}" \
+		--command "$configure_cmd" \
+		"${SSH_USER}@vmi/${VMI_NAME}"; then
+		echo "ERROR: Failed to configure VM environment"
+		exit 1
+	fi
+
+	echo "Timezone set to Europe/Berlin"
+	echo "roxroot bind mounts created at /tmp/roxroot"
+	echo ""
+}
+
 # Check if service/timer is already installed and stop it if running
 check_existing_service() {
 	echo "Checking if vm-agent timer/service is already installed..."
@@ -391,6 +415,7 @@ main() {
 	setup_ssh_opts
 	test_ssh_connection
 	check_git_branch
+	configure_vm
 	check_existing_service
 	build_agent
 	copy_files_to_vmi

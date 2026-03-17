@@ -6,6 +6,6 @@ After=network.target
 Type=oneshot
 User=root
 WorkingDirectory=/home/cloud-user/
-ExecStart=/home/cloud-user/vm-agent-amd64 --port 818
+ExecStart=/home/cloud-user/vm-agent-amd64 --port 818 --host-path /tmp/roxroot
 StandardOutput=journal
 StandardError=journal
