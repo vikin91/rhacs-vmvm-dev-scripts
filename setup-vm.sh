@@ -10,6 +10,7 @@ NAMESPACE="${NAMESPACE:-openshift-cnv}"
 SSH_USER="${SSH_USER:-cloud-user}"
 VM_PASSWORD="${VM_PASSWORD:-password}"
 VMI_NAME=""
+YES_FLAG=false
 declare -a SSH_OPTS
 
 # Check all prerequisites before proceeding
@@ -104,13 +105,18 @@ check_ssh_agent() {
 		echo "   ssh-add ~/.ssh/id_ed25519"
 		echo ""
 		
-		read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-		echo ""
-		if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-			echo "Aborted by user"
-			exit 1
+		if [ "$YES_FLAG" = true ]; then
+			echo "   (-y flag set, continuing anyway)"
+			echo ""
+		else
+			read -p "Do you want to continue anyway? (y/N): " -n 1 -r
+			echo ""
+			if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+				echo "Aborted by user"
+				exit 1
+			fi
+			echo ""
 		fi
-		echo ""
 	else
 		echo "✓ SSH agent is running with $key_count key(s) loaded"
 		echo ""
@@ -203,11 +209,16 @@ test_ssh_connection() {
 	echo "   Password: ${VM_PASSWORD:-password}"
 	echo ""
 	
-	read -p "Continue with password authentication? (y/N): " -n 1 -r
-	echo ""
-	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-		echo "Aborted by user"
-		exit 1
+	if [ "$YES_FLAG" = true ]; then
+		echo "   (-y flag set, continuing with password authentication)"
+		echo ""
+	else
+		read -p "Continue with password authentication? (y/N): " -n 1 -r
+		echo ""
+		if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+			echo "Aborted by user"
+			exit 1
+		fi
 	fi
 	echo "Continuing... (you will be prompted for passwords)"
 	echo ""
@@ -248,13 +259,18 @@ check_git_branch() {
 		echo "⚠️  WARNING: You are not on the master/main branch!"
 		echo "   Current branch: $current_branch"
 		echo ""
-		read -p "Do you want to continue? (y/N): " -n 1 -r
-		echo ""
-		if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-			echo "Aborted by user"
-			exit 1
+		if [ "$YES_FLAG" = true ]; then
+			echo "   (-y flag set, continuing anyway)"
+			echo ""
+		else
+			read -p "Do you want to continue? (y/N): " -n 1 -r
+			echo ""
+			if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+				echo "Aborted by user"
+				exit 1
+			fi
+			echo ""
 		fi
-		echo ""
 	fi
 }
 
@@ -406,11 +422,20 @@ verify_service() {
 
 # Main execution flow
 main() {
+	local vmi_arg=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			-y|--yes) YES_FLAG=true; shift ;;
+			-*) echo "Unknown option: $1"; exit 1 ;;
+			*) vmi_arg="$1"; shift ;;
+		esac
+	done
+
 	echo "=== VMI Agent Setup Script ==="
 	echo ""
 
 	check_prerequisites
-	get_vmi_name "${1:-}"
+	get_vmi_name "${vmi_arg}"
 	validate_vmi
 	setup_ssh_opts
 	test_ssh_connection
