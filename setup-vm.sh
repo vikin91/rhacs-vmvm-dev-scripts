@@ -59,6 +59,12 @@ check_prerequisites() {
 		exit 1
 	fi
 
+	if ! test -f "${DIR}/vm-agent.timer"; then
+		echo "ERROR: vm-agent.timer file not found at: ${DIR}/vm-agent.timer"
+		echo "Please create this file before running the script"
+		exit 1
+	fi
+
 	echo "Prerequisites OK"
 	echo ""
 	
@@ -252,27 +258,27 @@ check_git_branch() {
 	fi
 }
 
-# Check if service is already installed and stop it if running
+# Check if service/timer is already installed and stop it if running
 check_existing_service() {
-	echo "Checking if vm-agent service is already installed..."
+	echo "Checking if vm-agent timer/service is already installed..."
 	
-	local service_status
-	service_status=$(virtctl ssh "${SSH_OPTS[@]}" \
-		--command "sudo systemctl is-active vm-agent.service 2>/dev/null || echo 'not-found'" \
+	local timer_status
+	timer_status=$(virtctl ssh "${SSH_OPTS[@]}" \
+		--command "sudo systemctl is-active vm-agent.timer 2>/dev/null || echo 'not-found'" \
 		"${SSH_USER}@vmi/${VMI_NAME}" 2>/dev/null || echo "not-found")
 
-	if [ "$service_status" = "active" ]; then
-		echo "vm-agent service is already running on VMI '${VMI_NAME}'"
-		echo "Stopping service to update..."
+	if [ "$timer_status" = "active" ]; then
+		echo "vm-agent timer is already running on VMI '${VMI_NAME}'"
+		echo "Stopping timer and service to update..."
 		virtctl ssh "${SSH_OPTS[@]}" \
-			--command "sudo systemctl stop vm-agent.service" \
+			--command "sudo systemctl stop vm-agent.timer vm-agent.service 2>/dev/null || true" \
 			"${SSH_USER}@vmi/${VMI_NAME}"
-		echo "Service stopped"
-	elif [ "$service_status" = "inactive" ] || [ "$service_status" = "failed" ]; then
-		echo "vm-agent service exists but is not running (status: $service_status)"
+		echo "Timer and service stopped"
+	elif [ "$timer_status" = "inactive" ] || [ "$timer_status" = "failed" ]; then
+		echo "vm-agent timer exists but is not running (status: $timer_status)"
 		echo "Will update and restart..."
 	else
-		echo "vm-agent service not found, will perform fresh installation"
+		echo "vm-agent timer not found, will perform fresh installation"
 	fi
 	echo ""
 }
@@ -312,51 +318,63 @@ copy_files_to_vmi() {
 	fi
 	echo "Service file copied successfully"
 	echo ""
+
+	echo "Copying systemd timer file to VMI..."
+	if ! virtctl scp "${SSH_OPTS[@]}" \
+		"${DIR}/vm-agent.timer" \
+		"${SSH_USER}@vmi/${VMI_NAME}:"; then
+		echo "ERROR: Failed to copy timer file"
+		exit 1
+	fi
+	echo "Timer file copied successfully"
+	echo ""
 }
 
-# Install and start the systemd service
+# Install and start the systemd service and timer
 install_and_start_service() {
-	echo "Installing and starting vm-agent service..."
+	echo "Installing and starting vm-agent service and timer..."
 	
 	local install_cmd
 	install_cmd="sudo mv ~/vm-agent.service /etc/systemd/system/ && \
-sudo restorecon -v /etc/systemd/system/vm-agent.service 2>/dev/null || true && \
+sudo mv ~/vm-agent.timer /etc/systemd/system/ && \
+sudo restorecon -v /etc/systemd/system/vm-agent.service /etc/systemd/system/vm-agent.timer 2>/dev/null || true && \
 sudo chmod +x ~/vm-agent-amd64 && \
 sudo chcon -t bin_t ~/vm-agent-amd64 2>/dev/null || true && \
 sudo systemctl daemon-reload && \
-sudo systemctl enable vm-agent.service && \
-sudo systemctl start vm-agent.service"
+sudo systemctl enable vm-agent.timer && \
+sudo systemctl start vm-agent.timer"
 
 	if ! virtctl ssh "${SSH_OPTS[@]}" \
 		--command "$install_cmd" \
 		"${SSH_USER}@vmi/${VMI_NAME}"; then
-		echo "ERROR: Failed to install and start service"
+		echo "ERROR: Failed to install and start service/timer"
 		exit 1
 	fi
 	
-	echo "Service installed and started"
+	echo "Service and timer installed and started"
 	echo ""
 }
 
-# Verify that the service is running correctly
+# Verify that the timer is running correctly
 verify_service() {
-	echo "Verifying service status..."
-	sleep 2  # Give service a moment to start
+	echo "Verifying timer status..."
+	sleep 2  # Give timer a moment to start
 	
-	local service_result
-	service_result=$(virtctl ssh "${SSH_OPTS[@]}" \
-		--command "sudo systemctl status vm-agent.service --no-pager" \
+	local timer_result
+	timer_result=$(virtctl ssh "${SSH_OPTS[@]}" \
+		--command "sudo systemctl status vm-agent.timer --no-pager" \
 		"${SSH_USER}@vmi/${VMI_NAME}" 2>&1 || true)
 
-	echo "$service_result"
+	echo "$timer_result"
 	echo ""
 
-	if echo "$service_result" | grep -q "Active: active (running)"; then
+	if echo "$timer_result" | grep -q "Active: active (waiting)"; then
 		echo "=== Installation Complete ==="
-		echo "vm-agent service is successfully running on VMI '${VMI_NAME}'"
+		echo "vm-agent timer is active and waiting on VMI '${VMI_NAME}'"
+		echo "The agent will run every minute"
 		return 0
 	else
-		echo "WARNING: Service may not be running correctly"
+		echo "WARNING: Timer may not be running correctly"
 		echo "Check the status above for details"
 		return 1
 	fi
